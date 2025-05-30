@@ -33,7 +33,9 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
+      console.log('Attempting signup with:', { email, fullName, role });
+      
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -44,16 +46,29 @@ const Auth = () => {
         },
       });
 
-      if (error) throw error;
+      console.log('Signup response:', { data, error });
+
+      if (error) {
+        console.error('Signup error:', error);
+        throw error;
+      }
 
       toast({
         title: "Account created successfully!",
         description: "You can now sign in with your credentials.",
       });
+      
+      // Clear form
+      setEmail('');
+      setPassword('');
+      setFullName('');
+      setRole('tenant');
+      
     } catch (error: any) {
+      console.error('Signup error caught:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to create account. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -66,18 +81,26 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log('Attempting signin with:', { email });
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      console.log('Signin response:', { data, error });
+
+      if (error) {
+        console.error('Signin error:', error);
+        throw error;
+      }
 
       navigate('/dashboard');
     } catch (error: any) {
+      console.error('Signin error caught:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to sign in. Please check your credentials.",
         variant: "destructive",
       });
     } finally {
