@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,12 +10,15 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Wrench, Calendar, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { Database } from '@/integrations/supabase/types';
+
+type MaintenanceStatus = Database['public']['Enums']['maintenance_status'];
 
 interface MaintenanceLog {
   id: string;
   title: string;
   description: string;
-  status: string;
+  status: MaintenanceStatus;
   assigned_vendor: string;
   created_at: string;
   rooms: {
@@ -42,7 +44,7 @@ const MaintenanceManagement = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const { toast } = useToast();
 
   const [maintenanceForm, setMaintenanceForm] = useState({
@@ -146,7 +148,7 @@ const MaintenanceManagement = () => {
     }
   };
 
-  const updateMaintenanceStatus = async (id: string, status: string) => {
+  const updateMaintenanceStatus = async (id: string, status: MaintenanceStatus) => {
     try {
       const { error } = await supabase
         .from('maintenance_logs')
@@ -170,7 +172,7 @@ const MaintenanceManagement = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: MaintenanceStatus) => {
     switch (status) {
       case 'open':
         return 'destructive';
@@ -298,7 +300,7 @@ const MaintenanceManagement = () => {
                 </span>
                 <Select
                   value={log.status}
-                  onValueChange={(value) => updateMaintenanceStatus(log.id, value)}
+                  onValueChange={(value) => updateMaintenanceStatus(log.id, value as MaintenanceStatus)}
                 >
                   <SelectTrigger className="w-32">
                     <Badge variant={getStatusColor(log.status)} className="capitalize">

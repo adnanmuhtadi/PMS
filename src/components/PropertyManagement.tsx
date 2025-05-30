@@ -11,6 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Building, MapPin, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { Database } from '@/integrations/supabase/types';
+
+type RoomType = Database['public']['Enums']['room_type'];
 
 interface Property {
   id: string;
@@ -24,7 +27,7 @@ interface Room {
   id: string;
   property_id: string;
   room_number: string;
-  room_type: string;
+  room_type: RoomType;
   price: number;
   is_occupied: boolean;
 }
@@ -46,7 +49,7 @@ const PropertyManagement = () => {
 
   const [roomForm, setRoomForm] = useState({
     room_number: '',
-    room_type: 'single',
+    room_type: 'single' as RoomType,
     price: ''
   });
 
@@ -137,7 +140,8 @@ const PropertyManagement = () => {
       const { error } = await supabase
         .from('rooms')
         .insert({
-          ...roomForm,
+          room_number: roomForm.room_number,
+          room_type: roomForm.room_type,
           property_id: selectedPropertyId,
           price: parseFloat(roomForm.price)
         });
@@ -295,7 +299,7 @@ const PropertyManagement = () => {
                       <Label htmlFor="room-type">Room Type</Label>
                       <Select
                         value={roomForm.room_type}
-                        onValueChange={(value) => setRoomForm({ ...roomForm, room_type: value })}
+                        onValueChange={(value: RoomType) => setRoomForm({ ...roomForm, room_type: value })}
                       >
                         <SelectTrigger>
                           <SelectValue />
