@@ -8,38 +8,35 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Building, MapPin, Edit, Trash2 } from 'lucide-react';
+import { Plus, Building, Home, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import type { Database } from '@/integrations/supabase/types';
-
-type RoomType = Database['public']['Enums']['room_type'];
+import { useAuth } from '@/hooks/useAuth';
 
 interface Property {
   id: string;
   name: string;
   location: string;
   description: string;
-  created_at: string;
+  rooms: Room[];
 }
 
 interface Room {
   id: string;
-  property_id: string;
   room_number: string;
-  room_type: RoomType;
+  room_type: string;
   price: number;
   is_occupied: boolean;
 }
 
 const PropertyManagement = () => {
   const [properties, setProperties] = useState<Property[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [isPropertyDialogOpen, setIsPropertyDialogOpen] = useState(false);
   const [isRoomDialogOpen, setIsRoomDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [propertyForm, setPropertyForm] = useState({
     name: '',
@@ -49,7 +46,7 @@ const PropertyManagement = () => {
 
   const [roomForm, setRoomForm] = useState({
     room_number: '',
-    room_type: 'single' as RoomType,
+    room_type: '',
     price: ''
   });
 
@@ -57,17 +54,14 @@ const PropertyManagement = () => {
     fetchProperties();
   }, []);
 
-  useEffect(() => {
-    if (selectedPropertyId) {
-      fetchRooms(selectedPropertyId);
-    }
-  }, [selectedPropertyId]);
-
   const fetchProperties = async () => {
     try {
       const { data, error } = await supabase
         .from('properties')
-        .select('*')
+        .select(`
+          *,
+          rooms (*)
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -81,37 +75,15 @@ const PropertyManagement = () => {
     }
   };
 
-  const fetchRooms = async (propertyId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('rooms')
-        .select('*')
-        .eq('property_id', propertyId)
-        .order('room_number');
-
-      if (error) throw error;
-      setRooms(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleCreateProperty = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       const { error } = await supabase
         .from('properties')
         .insert({
           ...propertyForm,
-          created_by: user.id
+          created_by: user?.id
         });
 
       if (error) throw error;
@@ -136,14 +108,15 @@ const PropertyManagement = () => {
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!selectedProperty) return;
+
     try {
       const { error } = await supabase
         .from('rooms')
         .insert({
-          room_number: roomForm.room_number,
-          room_type: roomForm.room_type,
-          property_id: selectedPropertyId,
-          price: parseFloat(roomForm.price)
+          ...roomForm,
+          price: parseFloat(roomForm.price),
+          property_id: selectedProperty.id
         });
 
       if (error) throw error;
@@ -153,9 +126,9 @@ const PropertyManagement = () => {
         description: "Room created successfully",
       });
 
-      setRoomForm({ room_number: '', room_type: 'single', price: '' });
+      setRoomForm({ room_number: '', room_type: '', price: '' });
       setIsRoomDialogOpen(false);
-      fetchRooms(selectedPropertyId);
+      fetchProperties();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -175,7 +148,7 @@ const PropertyManagement = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold">Property & Room Management</h2>
-          <p className="text-gray-600">Manage your properties and room inventory</p>
+          <p className="text-gray-600">Manage properties and their rooms</p>
         </div>
         
         <Dialog open={isPropertyDialogOpen} onOpenChange={setIsPropertyDialogOpen}>
@@ -233,140 +206,126 @@ const PropertyManagement = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Properties</h3>
-          <div className="space-y-4">
-            {filteredProperties.map((property) => (
-              <Card
-                key={property.id}
-                className={`cursor-pointer transition-colors ${
-                  selectedPropertyId === property.id ? 'ring-2 ring-blue-500' : ''
-                }`}
-                onClick={() => setSelectedPropertyId(property.id)}
-              >
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center">
-                      <Building className="h-4 w-4 mr-2" />
-                      {property.name}
-                    </span>
-                  </CardTitle>
-                  <CardDescription className="flex items-center">
-                    <MapPin className="h-3 w-3 mr-1" />
-                    {property.location}
-                  </CardDescription>
-                </CardHeader>
-                {property.description && (
-                  <CardContent>
-                    <p className="text-sm text-gray-600">{property.description}</p>
-                  </CardContent>
-                )}
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">
-              Rooms {selectedPropertyId && `(${rooms.length})`}
-            </h3>
-            {selectedPropertyId && (
-              <Dialog open={isRoomDialogOpen} onOpenChange={setIsRoomDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Room
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Room</DialogTitle>
-                    <DialogDescription>Add a room to the selected property</DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleCreateRoom} className="space-y-4">
-                    <div>
-                      <Label htmlFor="room-number">Room Number</Label>
-                      <Input
-                        id="room-number"
-                        value={roomForm.room_number}
-                        onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="room-type">Room Type</Label>
-                      <Select
-                        value={roomForm.room_type}
-                        onValueChange={(value: RoomType) => setRoomForm({ ...roomForm, room_type: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="single">Single</SelectItem>
-                          <SelectItem value="double">Double</SelectItem>
-                          <SelectItem value="family">Family</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="room-price">Price</Label>
-                      <Input
-                        id="room-price"
-                        type="number"
-                        step="0.01"
-                        value={roomForm.price}
-                        onChange={(e) => setRoomForm({ ...roomForm, price: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <Button type="submit" className="w-full">Create Room</Button>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-
-          {selectedPropertyId ? (
-            <div className="space-y-3">
-              {rooms.map((room) => (
-                <Card key={room.id}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
+      <div className="space-y-6">
+        {filteredProperties.map((property) => (
+          <Card key={property.id}>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span className="flex items-center">
+                  <Building className="h-5 w-5 mr-2" />
+                  {property.name}
+                </span>
+                <Dialog open={isRoomDialogOpen} onOpenChange={setIsRoomDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      size="sm" 
+                      onClick={() => setSelectedProperty(property)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Room
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add Room to {selectedProperty?.name}</DialogTitle>
+                      <DialogDescription>Create a new room in this property</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleCreateRoom} className="space-y-4">
                       <div>
-                        <h4 className="font-medium">Room {room.room_number}</h4>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <Badge variant="outline" className="capitalize">
-                            {room.room_type}
-                          </Badge>
-                          <Badge variant={room.is_occupied ? "destructive" : "default"}>
-                            {room.is_occupied ? "Occupied" : "Available"}
-                          </Badge>
-                        </div>
+                        <Label htmlFor="room-number">Room Number</Label>
+                        <Input
+                          id="room-number"
+                          value={roomForm.room_number}
+                          onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })}
+                          required
+                        />
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">${room.price}</p>
-                        <p className="text-sm text-gray-500">per month</p>
+                      <div>
+                        <Label htmlFor="room-type">Room Type</Label>
+                        <Select
+                          value={roomForm.room_type}
+                          onValueChange={(value) => setRoomForm({ ...roomForm, room_type: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select room type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="single">Single</SelectItem>
+                            <SelectItem value="double">Double</SelectItem>
+                            <SelectItem value="family">Family</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="room-price">Monthly Price ($)</Label>
+                        <Input
+                          id="room-price"
+                          type="number"
+                          step="0.01"
+                          value={roomForm.price}
+                          onChange={(e) => setRoomForm({ ...roomForm, price: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" className="w-full">Create Room</Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </CardTitle>
+              <CardDescription>{property.location}</CardDescription>
+              {property.description && (
+                <p className="text-sm text-gray-600">{property.description}</p>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Rooms ({property.rooms.length} total)</h4>
+                  <div className="text-sm text-gray-600">
+                    {property.rooms.filter(room => !room.is_occupied).length} available
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {property.rooms.map((room) => (
+                    <div
+                      key={room.id}
+                      className="border rounded-lg p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium flex items-center">
+                          <Home className="h-3 w-3 mr-1" />
+                          Room {room.room_number}
+                        </span>
+                        <Badge
+                          variant={room.is_occupied ? "destructive" : "default"}
+                          className="text-xs"
+                        >
+                          {room.is_occupied ? "Occupied" : "Available"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <Badge variant="outline" className="capitalize">
+                          {room.room_type}
+                        </Badge>
+                        <span className="font-medium">${room.price}/month</span>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {rooms.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  No rooms found. Add rooms to this property.
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="text-center text-gray-500 py-8">
-              Select a property to view its rooms
-            </p>
-          )}
-        </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
+
+      {filteredProperties.length === 0 && (
+        <div className="text-center py-12">
+          <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No properties found</h3>
+          <p className="text-gray-600">Create your first property to get started</p>
+        </div>
+      )}
     </div>
   );
 };

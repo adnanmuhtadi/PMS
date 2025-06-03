@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,18 +8,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Wrench, Calendar, MapPin } from 'lucide-react';
+import { Plus, Wrench, Search, Calendar, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import type { Database } from '@/integrations/supabase/types';
-
-type MaintenanceStatus = Database['public']['Enums']['maintenance_status'];
+import { useAuth } from '@/hooks/useAuth';
 
 interface MaintenanceLog {
   id: string;
   title: string;
   description: string;
-  status: MaintenanceStatus;
+  status: string;
   assigned_vendor: string;
   created_at: string;
   rooms: {
@@ -32,20 +31,19 @@ interface MaintenanceLog {
 interface Room {
   id: string;
   room_number: string;
-  property_id: string;
   properties: {
-    id: string;
     name: string;
   };
 }
 
 const MaintenanceManagement = () => {
   const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [maintenanceForm, setMaintenanceForm] = useState({
     title: '',
@@ -56,7 +54,7 @@ const MaintenanceManagement = () => {
 
   useEffect(() => {
     fetchMaintenanceLogs();
-    fetchRooms();
+    fetchAvailableRooms();
   }, []);
 
   const fetchMaintenanceLogs = async () => {
@@ -83,20 +81,19 @@ const MaintenanceManagement = () => {
     }
   };
 
-  const fetchRooms = async () => {
+  const fetchAvailableRooms = async () => {
     try {
       const { data, error } = await supabase
         .from('rooms')
         .select(`
           id,
           room_number,
-          property_id,
-          properties (id, name)
+          properties (name)
         `)
         .order('room_number');
 
       if (error) throw error;
-      setRooms(data || []);
+      setAvailableRooms(data || []);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -110,25 +107,18 @@ const MaintenanceManagement = () => {
     e.preventDefault();
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const selectedRoom = rooms.find(room => room.id === maintenanceForm.room_id);
-      if (!selectedRoom) throw new Error('Room not found');
-
       const { error } = await supabase
         .from('maintenance_logs')
         .insert({
           ...maintenanceForm,
-          property_id: selectedRoom.properties.id,
-          reported_by: user.id
+          reported_by: user?.id
         });
 
       if (error) throw error;
 
       toast({
         title: "Success",
-        description: "Maintenance issue logged successfully",
+        description: "Maintenance request created successfully",
       });
 
       setMaintenanceForm({
@@ -148,12 +138,12 @@ const MaintenanceManagement = () => {
     }
   };
 
-  const updateMaintenanceStatus = async (id: string, status: MaintenanceStatus) => {
+  const handleUpdateStatus = async (logId: string, newStatus: string) => {
     try {
       const { error } = await supabase
         .from('maintenance_logs')
-        .update({ status })
-        .eq('id', id);
+        .update({ status: newStatus })
+        .eq('id', logId);
 
       if (error) throw error;
 
@@ -172,7 +162,7 @@ const MaintenanceManagement = () => {
     }
   };
 
-  const getStatusColor = (status: MaintenanceStatus) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'open':
         return 'destructive';
@@ -198,42 +188,42 @@ const MaintenanceManagement = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold">Maintenance Management</h2>
-          <p className="text-gray-600">Track and manage maintenance issues</p>
+          <p className="text-gray-600">Track and manage maintenance requests</p>
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              Log Issue
+              Add Maintenance Request
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Log Maintenance Issue</DialogTitle>
-              <DialogDescription>Report a new maintenance issue for a room</DialogDescription>
+              <DialogTitle>Create Maintenance Request</DialogTitle>
+              <DialogDescription>Report a new maintenance issue</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreateMaintenanceLog} className="space-y-4">
               <div>
-                <Label htmlFor="issue-title">Issue Title</Label>
+                <Label htmlFor="maintenance-title">Title</Label>
                 <Input
-                  id="issue-title"
+                  id="maintenance-title"
                   value={maintenanceForm.title}
                   onChange={(e) => setMaintenanceForm({ ...maintenanceForm, title: e.target.value })}
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="issue-description">Description</Label>
+                <Label htmlFor="maintenance-description">Description</Label>
                 <Textarea
-                  id="issue-description"
+                  id="maintenance-description"
                   value={maintenanceForm.description}
                   onChange={(e) => setMaintenanceForm({ ...maintenanceForm, description: e.target.value })}
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="issue-room">Room</Label>
+                <Label htmlFor="maintenance-room">Room</Label>
                 <Select
                   value={maintenanceForm.room_id}
                   onValueChange={(value) => setMaintenanceForm({ ...maintenanceForm, room_id: value })}
@@ -242,7 +232,7 @@ const MaintenanceManagement = () => {
                     <SelectValue placeholder="Select a room" />
                   </SelectTrigger>
                   <SelectContent>
-                    {rooms.map((room) => (
+                    {availableRooms.map((room) => (
                       <SelectItem key={room.id} value={room.id}>
                         Room {room.room_number} - {room.properties.name}
                       </SelectItem>
@@ -251,15 +241,14 @@ const MaintenanceManagement = () => {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="assigned-vendor">Assigned Vendor (Optional)</Label>
+                <Label htmlFor="maintenance-vendor">Assigned Vendor (Optional)</Label>
                 <Input
-                  id="assigned-vendor"
+                  id="maintenance-vendor"
                   value={maintenanceForm.assigned_vendor}
                   onChange={(e) => setMaintenanceForm({ ...maintenanceForm, assigned_vendor: e.target.value })}
-                  placeholder="Vendor name or company"
                 />
               </div>
-              <Button type="submit" className="w-full">Log Issue</Button>
+              <Button type="submit" className="w-full">Create Request</Button>
             </form>
           </DialogContent>
         </Dialog>
@@ -269,7 +258,7 @@ const MaintenanceManagement = () => {
         <div className="flex items-center space-x-2">
           <Search className="h-4 w-4 text-gray-400" />
           <Input
-            placeholder="Search issues..."
+            placeholder="Search maintenance requests..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-sm"
@@ -277,7 +266,7 @@ const MaintenanceManagement = () => {
         </div>
         
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-48">
+          <SelectTrigger className="max-w-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -289,7 +278,7 @@ const MaintenanceManagement = () => {
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="space-y-4">
         {filteredLogs.map((log) => (
           <Card key={log.id}>
             <CardHeader>
@@ -298,42 +287,42 @@ const MaintenanceManagement = () => {
                   <Wrench className="h-4 w-4 mr-2" />
                   {log.title}
                 </span>
-                <Select
-                  value={log.status}
-                  onValueChange={(value) => updateMaintenanceStatus(log.id, value as MaintenanceStatus)}
-                >
-                  <SelectTrigger className="w-32">
-                    <Badge variant={getStatusColor(log.status)} className="capitalize">
-                      {log.status.replace('_', ' ')}
-                    </Badge>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="open">Open</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="resolved">Resolved</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={log.status}
+                    onValueChange={(value) => handleUpdateStatus(log.id, value)}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Badge variant={getStatusColor(log.status)} className="capitalize">
+                    {log.status.replace('_', ' ')}
+                  </Badge>
+                </div>
               </CardTitle>
-              <CardDescription className="flex items-center">
-                <MapPin className="h-3 w-3 mr-1" />
+              <CardDescription>
                 Room {log.rooms.room_number} - {log.rooms.properties.name}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-sm text-gray-700">{log.description}</p>
+              <p className="text-sm">{log.description}</p>
               
               {log.assigned_vendor && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Assigned to:</span>
-                  <span className="text-sm font-medium">{log.assigned_vendor}</span>
+                <div className="flex items-center text-sm text-gray-600">
+                  <User className="h-3 w-3 mr-1" />
+                  Assigned to: {log.assigned_vendor}
                 </div>
               )}
               
-              <div className="flex items-center justify-between text-sm text-gray-500">
-                <span className="flex items-center">
-                  <Calendar className="h-3 w-3 mr-1" />
-                  {new Date(log.created_at).toLocaleDateString()}
-                </span>
+              <div className="flex items-center text-xs text-gray-500">
+                <Calendar className="h-3 w-3 mr-1" />
+                Reported: {new Date(log.created_at).toLocaleDateString()}
               </div>
             </CardContent>
           </Card>
@@ -343,13 +332,8 @@ const MaintenanceManagement = () => {
       {filteredLogs.length === 0 && (
         <div className="text-center py-12">
           <Wrench className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No maintenance issues found</h3>
-          <p className="text-gray-600">
-            {searchTerm || statusFilter !== 'all' 
-              ? "Try adjusting your search or filter criteria"
-              : "Log your first maintenance issue to get started"
-            }
-          </p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No maintenance requests found</h3>
+          <p className="text-gray-600">Create your first maintenance request to get started</p>
         </div>
       )}
     </div>
