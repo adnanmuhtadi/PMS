@@ -17,7 +17,7 @@ interface MaintenanceLog {
   id: string;
   title: string;
   description: string;
-  status: string;
+  status: 'open' | 'in_progress' | 'resolved';
   assigned_vendor: string;
   created_at: string;
   rooms: {
@@ -31,7 +31,9 @@ interface MaintenanceLog {
 interface Room {
   id: string;
   room_number: string;
+  property_id: string;
   properties: {
+    id: string;
     name: string;
   };
 }
@@ -88,7 +90,8 @@ const MaintenanceManagement = () => {
         .select(`
           id,
           room_number,
-          properties (name)
+          property_id,
+          properties (id, name)
         `)
         .order('room_number');
 
@@ -107,10 +110,20 @@ const MaintenanceManagement = () => {
     e.preventDefault();
     
     try {
+      // Find the selected room to get the property_id
+      const selectedRoom = availableRooms.find(room => room.id === maintenanceForm.room_id);
+      if (!selectedRoom) {
+        throw new Error('Please select a valid room');
+      }
+
       const { error } = await supabase
         .from('maintenance_logs')
         .insert({
-          ...maintenanceForm,
+          title: maintenanceForm.title,
+          description: maintenanceForm.description,
+          room_id: maintenanceForm.room_id,
+          property_id: selectedRoom.property_id,
+          assigned_vendor: maintenanceForm.assigned_vendor,
           reported_by: user?.id
         });
 
@@ -138,7 +151,7 @@ const MaintenanceManagement = () => {
     }
   };
 
-  const handleUpdateStatus = async (logId: string, newStatus: string) => {
+  const handleUpdateStatus = async (logId: string, newStatus: 'open' | 'in_progress' | 'resolved') => {
     try {
       const { error } = await supabase
         .from('maintenance_logs')
@@ -290,7 +303,7 @@ const MaintenanceManagement = () => {
                 <div className="flex items-center gap-2">
                   <Select
                     value={log.status}
-                    onValueChange={(value) => handleUpdateStatus(log.id, value)}
+                    onValueChange={(value: 'open' | 'in_progress' | 'resolved') => handleUpdateStatus(log.id, value)}
                   >
                     <SelectTrigger className="w-32">
                       <SelectValue />

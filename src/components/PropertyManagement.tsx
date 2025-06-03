@@ -24,7 +24,7 @@ interface Property {
 interface Room {
   id: string;
   room_number: string;
-  room_type: string;
+  room_type: 'single' | 'double' | 'family';
   price: number;
   is_occupied: boolean;
 }
@@ -46,7 +46,7 @@ const PropertyManagement = () => {
 
   const [roomForm, setRoomForm] = useState({
     room_number: '',
-    room_type: '',
+    room_type: '' as 'single' | 'double' | 'family' | '',
     price: ''
   });
 
@@ -108,13 +108,14 @@ const PropertyManagement = () => {
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedProperty) return;
+    if (!selectedProperty || !roomForm.room_type) return;
 
     try {
       const { error } = await supabase
         .from('rooms')
         .insert({
-          ...roomForm,
+          room_number: roomForm.room_number,
+          room_type: roomForm.room_type as 'single' | 'double' | 'family',
           price: parseFloat(roomForm.price),
           property_id: selectedProperty.id
         });
@@ -244,7 +245,7 @@ const PropertyManagement = () => {
                         <Label htmlFor="room-type">Room Type</Label>
                         <Select
                           value={roomForm.room_type}
-                          onValueChange={(value) => setRoomForm({ ...roomForm, room_type: value })}
+                          onValueChange={(value: 'single' | 'double' | 'family') => setRoomForm({ ...roomForm, room_type: value })}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select room type" />
